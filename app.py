@@ -162,53 +162,152 @@ class AgenteConsejeroUNJBG:
 bot = AgenteConsejeroUNJBG()
 
 # =====================================================
-# 6. INTERFAZ GRADIO (Adaptada para Render)
+# 6. INTERFAZ GRADIO PERSONALIZADA (CON HISTORIAL)
 # =====================================================
-with gr.Blocks(theme=gr.themes.Soft(), title="UNJBG - Consejero Vocacional") as demo:
+
+# Tema personalizado con colores de la UNJBG
+unjbg_theme = gr.themes.Soft(
+    primary_hue="blue",
+    secondary_hue="indigo",
+    neutral_hue="gray",
+    font=gr.themes.GoogleFont("Poppins"),
+).set(
+    block_title_text_color="#003366",      # Azul oscuro institucional
+    block_label_text_color="#003366",
+    button_primary_background_fill="#003366",
+    button_primary_background_fill_hover="#001a33",
+    button_primary_text_color="white",
+    input_background_fill="#f0f4f8",
+    input_border_color="#003366",
+    shadow_spread="2px",
+)
+
+with gr.Blocks(theme=unjbg_theme, title="UNJBG - Consejero Vocacional") as demo:
+    # Encabezado con logo
     gr.Markdown("""
-    # 🎓 Agente Consejero de Admisión UNJBG (Tacna, Perú)
-    ### Sistema Inteligente con RAG Vectorial y Extracción Estructurada JSON
+    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #003366, #004c99); border-radius: 12px; margin-bottom: 2rem;">
+        <img src="logo_unjbg.png" style="height: 60px; margin-bottom: 10px;">
+        <h1 style="...">UNJBG - Tacna</h1>
+        <h2 style="color: #ffd700; margin: 0; font-weight: 300; font-size: 1.4rem;">Agente Consejero de Admisión</h2>
+        <p style="color: #e0e8f0; margin: 0.5rem 0 0 0; font-size: 0.9rem;">Sistema Inteligente con RAG, LangChain y Groq</p>
+    </div>
     """)
     
     with gr.Row():
-        with gr.Column(scale=2):
-            input_box = gr.Textbox(
-                label="✏️ Consulta del Postulante",
-                placeholder="Ej: Hola, me llamo Juan. Estoy estresado y quiero saber cuánto dura Ingeniería de Sistemas",
-                lines=3
+        with gr.Column(scale=3):
+            # Componente de chat con historial
+            chatbot = gr.Chatbot(
+                label="💬 Conversación",
+                height=450,
+                bubble_full_width=False,
+                avatar_images=(None, "🧑‍🏫"),
+                show_copy_button=True,
+                render_markdown=True,
             )
-            with gr.Row():
-                btn_enviar = gr.Button("🚀 Enviar Consulta", variant="primary")
-                btn_limpiar = gr.Button("🔄 Reiniciar Conversación", variant="secondary")
             
-            output_box = gr.Textbox(
-                label="💬 Respuesta del Consejero Vocacional",
-                interactive=False,
-                lines=10
-            )
+            with gr.Row():
+                msg = gr.Textbox(
+                    label="✏️ Escribe tu consulta",
+                    placeholder="Ej: Hola, me llamo Juan. Estoy nervioso por el examen...",
+                    scale=4,
+                    lines=2,
+                )
+                send_btn = gr.Button("🚀 Enviar", variant="primary", scale=1)
+            
+            with gr.Row():
+                clear_btn = gr.Button("🔄 Reiniciar Conversación", variant="secondary", size="sm")
+                info_btn = gr.Button("ℹ️ Ayuda", variant="secondary", size="sm")
         
         with gr.Column(scale=1):
-            gr.Markdown("### 📊 Extracción de Metadatos (JSON)")
+            gr.Markdown("### 📊 Perfil del Postulante (JSON)")
             json_box = gr.JSON(
-                label="Perfil del Postulante",
-                value={"status": "Esperando consulta..."}
+                label="Datos Estructurados",
+                value={"status": "Esperando tu primera consulta..."},
             )
     
-    # Eventos
-    btn_enviar.click(
-        fn=bot.generar_respuesta,
-        inputs=input_box,
-        outputs=[output_box, json_box]
-    )
-    btn_limpiar.click(
-        fn=bot.limpiar_memoria,
+    # Estado para el historial (se mantiene en la sesión)
+    state = gr.State([])
+    
+    # =============================================
+    # FUNCIONES DE RESPUESTA (con historial)
+    # =============================================
+    
+    def respond(message, chat_history, json_state):
+        if not message or not message.strip():
+            return chat_history, {"status": "Entrada vacía"}, chat_history
+        
+        try:
+            # Llamar al orquestador (como antes)
+            resultado = orquestador.invoke({
+                "message": message,
+                "chat_history": chat_history
+            })
+            
+            respuesta_agente = resultado.get('respuesta_estudiante', '')
+            metadatos = resultado.get('datos_estructurados', {})
+            
+            # Construir el historial para Gradio (lista de tuplas)
+            new_history = chat_history + [(message, respuesta_agente)]
+            
+            # Actualizar el estado interno (para memoria)
+            chat_history.append(HumanMessage(content=message))
+            chat_history.append(AIMessage(content=respuesta_agente))
+            
+            return new_history, metadatos, chat_history
+            
+        except Exception as e:
+            error_msg = f"❌ Error: {str(e)}"
+            return chat_history + [(message, error_msg)], {"status": "Error"}, chat_history
+    
+    def clear_conversation():
+        return [], {"status": "Conversación reiniciada"}, []
+    
+    # =============================================
+    # EVENTOS
+    # =============================================
+    
+    send_btn.click(
+        fn=respond,
+        inputs=[msg, state, state],
+        outputs=[chatbot, json_box, state]
+    ).then(
+        fn=lambda: "",
         inputs=None,
-        outputs=[output_box, json_box]
+        outputs=[msg]
     )
-    input_box.submit(
-        fn=bot.generar_respuesta,
-        inputs=input_box,
-        outputs=[output_box, json_box]
+    
+    msg.submit(
+        fn=respond,
+        inputs=[msg, state, state],
+        outputs=[chatbot, json_box, state]
+    ).then(
+        fn=lambda: "",
+        inputs=None,
+        outputs=[msg]
+    )
+    
+    clear_btn.click(
+        fn=clear_conversation,
+        inputs=None,
+        outputs=[chatbot, json_box, state]
+    )
+    
+    def show_help():
+        return """
+        **📋 ¿Cómo usar el consejero?**
+        
+        1. **Preséntate**: Di tu nombre y cómo te sientes.
+        2. **Pregunta sobre carreras**: Ej. "¿Cuánto dura Ingeniería de Sistemas?"
+        3. **Consulta sobre el examen**: Ej. "¿Cómo es el examen de admisión?"
+        4. **Expresa dudas**: Ej. "No sé qué carrera elegir"
+        
+        El sistema extraerá automáticamente tus datos en formato JSON.
+        """
+    
+    info_btn.click(
+        fn=show_help,
+        inputs=None,
+        outputs=[msg]
     )
 
 # =====================================================
