@@ -2,7 +2,7 @@ services:
   - type: web
     name: agente-unjbg
     runtime: image
-    repo: https://github.com/TU_USUARIO/agente-unjbg
+    repo: https://github.com/BryanHuaPer/agente-unjbg
     plan: free
     dockerfilePath: ./Dockerfile
     envVars:
