@@ -129,155 +129,181 @@ orquestador = RunnableParallel({
 })
 
 # =====================================================
-# 5. CLASE PARA GRADIO CON MEMORIA POR SESIÓN
+# 5. CLASE MEJORADA PARA GRADIO (con historial)
 # =====================================================
 class AgenteConsejeroUNJBG:
     def __init__(self):
-        self.historial = []
-    
+        self.historial_messages = []  # para LangChain
+        self.historial_gradio = []    # para el componente Chatbot (lista de tuplas)
+
     def generar_respuesta(self, pregunta_usuario):
         if not pregunta_usuario or not pregunta_usuario.strip():
-            return "Por favor, escribe una consulta válida.", {"status": "Entrada vacía"}
+            return self.historial_gradio, {"status": "Entrada vacía"}
         
         try:
             resultado = orquestador.invoke({
                 "message": pregunta_usuario,
-                "chat_history": self.historial
+                "chat_history": self.historial_messages
             })
             
             respuesta = resultado.get('respuesta_estudiante', '')
             metadatos = resultado.get('datos_estructurados', {})
             
-            self.historial.append(HumanMessage(content=pregunta_usuario))
-            self.historial.append(AIMessage(content=respuesta))
+            # Actualizar historial de LangChain
+            self.historial_messages.append(HumanMessage(content=pregunta_usuario))
+            self.historial_messages.append(AIMessage(content=respuesta))
             
-            return respuesta, metadatos
+            # Actualizar historial de Gradio (tupla: (usuario, asistente))
+            self.historial_gradio.append((pregunta_usuario, respuesta))
+            
+            return self.historial_gradio, metadatos
         except Exception as e:
-            return f"❌ Error: {str(e)}", {"status": "Error", "detalle": str(e)}
+            error_msg = f"Error: {str(e)}"
+            self.historial_gradio.append((pregunta_usuario, error_msg))
+            return self.historial_gradio, {"status": "Error", "detalle": str(e)}
     
     def limpiar_memoria(self):
-        self.historial = []
-        return "🔄 Conversación reiniciada", {"status": "Reiniciado"}
+        self.historial_messages = []
+        self.historial_gradio = []
+        return self.historial_gradio, {"status": "Reiniciado"}
 
 bot = AgenteConsejeroUNJBG()
 
 # =====================================================
-# 6. INTERFAZ GRADIO PERSONALIZADA (CON HISTORIAL)
+# 6. INTERFAZ GRADIO CON DISEÑO INSTITUCIONAL (sin emojis excesivos)
 # =====================================================
 
-# Tema personalizado con colores de la UNJBG
-unjbg_theme = gr.themes.Soft(
+# Tema personalizado: colores sobrios
+custom_theme = gr.themes.Soft(
     primary_hue="blue",
-    secondary_hue="indigo",
+    secondary_hue="gray",
     neutral_hue="gray",
-    font=gr.themes.GoogleFont("Poppins"),
+    font=gr.themes.GoogleFont("Inter"),
 ).set(
-    block_title_text_color="#003366",      # Azul oscuro institucional
-    block_label_text_color="#003366",
-    button_primary_background_fill="#003366",
-    button_primary_background_fill_hover="#001a33",
+    body_background_fill="#f5f7fa",
+    block_title_text_color="#1a2a4a",
+    block_label_text_color="#1a2a4a",
+    button_primary_background_fill="#1a3a6a",
+    button_primary_background_fill_hover="#0e2a4a",
     button_primary_text_color="white",
-    input_background_fill="#f0f4f8",
-    input_border_color="#003366",
-    shadow_spread="2px",
+    button_secondary_background_fill="#e8edf4",
+    button_secondary_background_fill_hover="#d0dae8",
+    input_background_fill="white",
+    input_border_color="#c0c8d8",
+    shadow_spread="4px",
 )
 
-with gr.Blocks(theme=unjbg_theme, title="UNJBG - Consejero Vocacional") as demo:
-    # Encabezado con logo
-    with gr.Group():
-        gr.Image(
-            value="logo_unjbg.png",
-            show_label=False,
-            container=False,
-            height=90,
-            interactive=False
-        )
-
-        gr.Markdown("""
-    # 🎓 UNJBG - Tacna
-
-    ### <span style="color:#ffd700">Agente Consejero de Admisión</span>
-
-    Sistema Inteligente con RAG, LangChain y Groq
+with gr.Blocks(theme=custom_theme, title="UNJBG - Consejero Vocacional", css="""
+    .header-container {
+        background: white;
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 6px solid #1a3a6a;
+    }
+    .header-title {
+        color: #1a2a4a;
+        font-weight: 600;
+        font-size: 1.8rem;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+    .header-subtitle {
+        color: #4a5a7a;
+        font-weight: 400;
+        font-size: 1.1rem;
+        margin: 0.2rem 0 0 0;
+    }
+    .header-badge {
+        background: #e8edf4;
+        color: #1a3a6a;
+        padding: 0.2rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        display: inline-block;
+        margin-top: 0.5rem;
+    }
+    .footer-note {
+        text-align: center;
+        color: #7a8a9a;
+        font-size: 0.8rem;
+        margin-top: 2rem;
+        border-top: 1px solid #e0e6ee;
+        padding-top: 1rem;
+    }
+""") as demo:
+    
+    # Encabezado personalizado (sin emojis)
+    gr.HTML("""
+    <div class="header-container">
+        <h1 class="header-title">Universidad Nacional Jorge Basadre Grohmann</h1>
+        <p class="header-subtitle">Oficina de Admisión · Consejero Vocacional</p>
+        <span class="header-badge">Sistema Inteligente con RAG</span>
+    </div>
     """)
     
     with gr.Row():
         with gr.Column(scale=3):
-            # Componente de chat con historial
             chatbot = gr.Chatbot(
-                label="💬 Conversación",
-                height=450,
+                label="Conversación",
+                height=480,
                 bubble_full_width=False,
-                avatar_images=(None, "🧑‍🏫"),
+                avatar_images=(None, "🏛️"),  # opcional: ícono institucional
                 show_copy_button=True,
                 render_markdown=True,
+                elem_id="chatbot"
             )
-            
             with gr.Row():
                 msg = gr.Textbox(
-                    label="✏️ Escribe tu consulta",
-                    placeholder="Ej: Hola, me llamo Juan. Estoy nervioso por el examen...",
+                    label="Escribe tu consulta",
+                    placeholder="Ejemplo: Hola, me llamo Juan. Estoy nervioso por el examen...",
                     scale=4,
                     lines=2,
+                    elem_id="input-msg"
                 )
-                send_btn = gr.Button("🚀 Enviar", variant="primary", scale=1)
-            
+                send_btn = gr.Button("Enviar", variant="primary", scale=1)
             with gr.Row():
-                clear_btn = gr.Button("🔄 Reiniciar Conversación", variant="secondary", size="sm")
-                info_btn = gr.Button("ℹ️ Ayuda", variant="secondary", size="sm")
+                clear_btn = gr.Button("Reiniciar conversación", variant="secondary", size="sm")
+                info_btn = gr.Button("Ayuda", variant="secondary", size="sm")
         
         with gr.Column(scale=1):
-            gr.Markdown("### 📊 Perfil del Postulante (JSON)")
+            gr.Markdown("### Datos del postulante (JSON)")
             json_box = gr.JSON(
-                label="Datos Estructurados",
-                value={"status": "Esperando tu primera consulta..."},
+                label="Perfil extraído",
+                value={"status": "Esperando consulta..."},
+                elem_id="json-box"
             )
     
-    # Estado para el historial (se mantiene en la sesión)
-    state = gr.State([])
-    
-    # =============================================
-    # FUNCIONES DE RESPUESTA (con historial)
-    # =============================================
-    
-    def respond(message, chat_history, json_state):
-        if not message or not message.strip():
-            return chat_history, {"status": "Entrada vacía"}, chat_history
-        
-        try:
-            # Llamar al orquestador (como antes)
-            resultado = orquestador.invoke({
-                "message": message,
-                "chat_history": chat_history
-            })
-            
-            respuesta_agente = resultado.get('respuesta_estudiante', '')
-            metadatos = resultado.get('datos_estructurados', {})
-            
-            # Construir el historial para Gradio (lista de tuplas)
-            new_history = chat_history + [(message, respuesta_agente)]
-            
-            # Actualizar el estado interno (para memoria)
-            chat_history.append(HumanMessage(content=message))
-            chat_history.append(AIMessage(content=respuesta_agente))
-            
-            return new_history, metadatos, chat_history
-            
-        except Exception as e:
-            error_msg = f"❌ Error: {str(e)}"
-            return chat_history + [(message, error_msg)], {"status": "Error"}, chat_history
+    # Estado: usamos el historial de la clase directamente
+    # Pero necesitamos una función para actualizar el chatbot y json
+    def respond(message, state_history):
+        # state_history no se usa realmente, porque la clase guarda el estado
+        # pero lo mantenemos por compatibilidad
+        historial, metadatos = bot.generar_respuesta(message)
+        return historial, metadatos
     
     def clear_conversation():
-        return [], {"status": "Conversación reiniciada"}, []
+        historial, metadatos = bot.limpiar_memoria()
+        return historial, metadatos
     
-    # =============================================
-    # EVENTOS
-    # =============================================
+    def show_help():
+        return """
+        **Uso del consejero**
+        
+        - Preséntate con tu nombre y cómo te sientes.
+        - Pregunta sobre duración de carreras, plan de estudios o proceso de admisión.
+        - Expresa tus dudas vocacionales para recibir orientación.
+        
+        El sistema extraerá automáticamente tus datos en formato JSON.
+        """
     
+    # Eventos
     send_btn.click(
         fn=respond,
-        inputs=[msg, state, state],
-        outputs=[chatbot, json_box, state]
+        inputs=[msg],
+        outputs=[chatbot, json_box]
     ).then(
         fn=lambda: "",
         inputs=None,
@@ -286,8 +312,8 @@ with gr.Blocks(theme=unjbg_theme, title="UNJBG - Consejero Vocacional") as demo:
     
     msg.submit(
         fn=respond,
-        inputs=[msg, state, state],
-        outputs=[chatbot, json_box, state]
+        inputs=[msg],
+        outputs=[chatbot, json_box]
     ).then(
         fn=lambda: "",
         inputs=None,
@@ -297,31 +323,25 @@ with gr.Blocks(theme=unjbg_theme, title="UNJBG - Consejero Vocacional") as demo:
     clear_btn.click(
         fn=clear_conversation,
         inputs=None,
-        outputs=[chatbot, json_box, state]
+        outputs=[chatbot, json_box]
     )
-    
-    def show_help():
-        return """
-        **📋 ¿Cómo usar el consejero?**
-        
-        1. **Preséntate**: Di tu nombre y cómo te sientes.
-        2. **Pregunta sobre carreras**: Ej. "¿Cuánto dura Ingeniería de Sistemas?"
-        3. **Consulta sobre el examen**: Ej. "¿Cómo es el examen de admisión?"
-        4. **Expresa dudas**: Ej. "No sé qué carrera elegir"
-        
-        El sistema extraerá automáticamente tus datos en formato JSON.
-        """
     
     info_btn.click(
         fn=show_help,
         inputs=None,
         outputs=[msg]
     )
+    
+    # Pie de página
+    gr.HTML("""
+    <div class="footer-note">
+        © 2026 UNJBG · Tacna, Perú · Desarrollado con LangChain, Groq y Gradio
+    </div>
+    """)
 
 # =====================================================
-# 7. LANZAMIENTO PARA RENDER (PUERTO 10000)
+# 7. LANZAMIENTO
 # =====================================================
 if __name__ == "__main__":
-    # Render asigna el puerto 10000 por defecto
     port = int(os.environ.get("PORT", 10000))
     demo.launch(server_name="0.0.0.0", server_port=port)
