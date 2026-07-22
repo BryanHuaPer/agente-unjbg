@@ -184,13 +184,21 @@ unjbg_theme = gr.themes.Soft(
 
 with gr.Blocks(theme=unjbg_theme, title="UNJBG - Consejero Vocacional") as demo:
     # Encabezado con logo
-    gr.Markdown("""
-    <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #003366, #004c99); border-radius: 12px; margin-bottom: 2rem;">
-        <img src="logo_unjbg.png" style="height: 60px; margin-bottom: 10px;">
-        <h1 style="...">UNJBG - Tacna</h1>
-        <h2 style="color: #ffd700; margin: 0; font-weight: 300; font-size: 1.4rem;">Agente Consejero de Admisión</h2>
-        <p style="color: #e0e8f0; margin: 0.5rem 0 0 0; font-size: 0.9rem;">Sistema Inteligente con RAG, LangChain y Groq</p>
-    </div>
+    with gr.Group():
+        gr.Image(
+            value="logo_unjbg.png",
+            show_label=False,
+            container=False,
+            height=90,
+            interactive=False
+        )
+
+        gr.Markdown("""
+    # 🎓 UNJBG - Tacna
+
+    ### <span style="color:#ffd700">Agente Consejero de Admisión</span>
+
+    Sistema Inteligente con RAG, LangChain y Groq
     """)
     
     with gr.Row():
