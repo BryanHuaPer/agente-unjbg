@@ -1,10 +1,10 @@
 services:
   - type: web
     name: agente-unjbg
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python app.py
+    runtime: image
+    repo: https://github.com/TU_USUARIO/agente-unjbg
+    plan: free
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: GROQ_API_KEY
         sync: false
-    pythonVersion: 3.12.8
